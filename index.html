@@ -14,14 +14,14 @@
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
 :root{
-  --paper:#FBF8F4; --ink:#3A302A; --muted:#7D7168; --rule:#E3D8CC; --rule2:#CDBFB1; --soft:#F0E8DF; --bar:#FFFFFF; --pro-bg:#FBE3DC; --pro:#A13F2A; --carb-bg:#E3EEF8; --carb:#2F5E86; --fat-bg:#ECE6F6; --fat:#5A4889; --pro-bar:#E5836B; --carb-bar:#5B95C9; --fat-bar:#8E7CC9;
+  --paper:#FBF8F4; --ink:#3A302A; --muted:#7D7168; --rule:#E3D8CC; --rule2:#CDBFB1; --soft:#F0E8DF; --bar:#FFFFFF; --pro-bg:#ECE6F6; --pro:#5A4889; --carb-bg:#E3EEF8; --carb:#2F5E86; --fat-bg:#FBE3DC; --fat:#A13F2A; --pro-bar:#8E7CC9; --carb-bar:#5B95C9; --fat-bar:#E5836B;
   --accent:#9DB04A; --accent-ink:#56631A; --accent-deep:#6E7F24; --black:#1F2410; --tomato:#C0392B; --field:#FFFFFF;
   --font:"Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
   box-sizing:border-box;
   padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
 }
 @media (prefers-color-scheme:dark){
-  :root:not([data-theme="light"]){ --paper:#1E1A17; --ink:#EDE6DE; --muted:#A89C91; --rule:#3A322C; --rule2:#4D433B; --soft:#2A2420; --bar:#26211D; --pro-bg:#3A221D; --pro:#F2A694; --carb-bg:#1C2A38; --carb:#9CC4EA; --fat-bg:#2C2739; --fat:#C2B5EC; --pro-bar:#E8927C; --carb-bar:#6FA6D8; --fat-bar:#A493DE; --accent:#A6BA52; --accent-ink:#C8D97F; --accent-deep:#B7CA66; --tomato:#FF7B6B; --field:#26211D; }
+  :root:not([data-theme="light"]){ --paper:#1E1A17; --ink:#EDE6DE; --muted:#A89C91; --rule:#3A322C; --rule2:#4D433B; --soft:#2A2420; --bar:#26211D; --pro-bg:#2C2739; --pro:#C2B5EC; --carb-bg:#1C2A38; --carb:#9CC4EA; --fat-bg:#3A221D; --fat:#F2A694; --pro-bar:#A493DE; --carb-bar:#6FA6D8; --fat-bar:#E8927C; --accent:#A6BA52; --accent-ink:#C8D97F; --accent-deep:#B7CA66; --tomato:#FF7B6B; --field:#26211D; }
 }
 *,*::before,*::after{box-sizing:inherit}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
@@ -829,7 +829,8 @@ function renderSettings(){
       <input type="file" id="impFile" accept="application/json,.json" hidden>
       <button class="secondary danger" id="wipe">Delete all data</button>
     </div>
-    <p class="note" style="margin-top:28px">Barcode data from Open Food Facts (openfoodfacts.org). Food search data from USDA FoodData Central (fdc.nal.usda.gov).</p>`;
+    <p class="note" style="margin-top:28px">Barcode data from Open Food Facts (openfoodfacts.org). Food search data from USDA FoodData Central (fdc.nal.usda.gov).</p>
+    <p class="note">MeraFood version 11 (olive)</p>`;
   $("#sSave").onclick = () => {
     const g = parseFloat($("#sGoal").value), w = parseFloat($("#sWeight").value);
     if (!(g > 0) || !(w > 0)){ toast("Enter a goal and weight above zero"); return; }
