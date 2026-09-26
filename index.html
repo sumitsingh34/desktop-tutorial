@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#D9661F">
 <title>MeraFood</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-2 -2 36 36' fill='%23141414' stroke='%23141414' stroke-width='0'><rect x='-2' y='-2' width='36' height='36' rx='7' fill='%23D9661F' stroke-width='0'/><circle cx='12' cy='8.5' r='5'/><path d='M2 31c0-8.5 4.3-13.5 10-13.5s10 5 10 13.5z'/><path d='M18.5 20.5l7-7' stroke-width='3.2' stroke-linecap='round' fill='none'/><path d='M27 30V9M24.5 2.5v4.2a2.5 2.5 0 0 0 5 0V2.5M27 2.5v4' stroke-width='2' stroke-linecap='round' fill='none'/></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -551,6 +553,7 @@ function renderSettings(){
 /* ---------- boot ---------- */
 document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => { tab = b.dataset.tab; if (tab === "today") cur = cur || todayKey(); render(); window.scrollTo(0,0); });
 render();
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 </script>
 </body>
 </html>
