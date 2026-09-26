@@ -67,6 +67,9 @@ button{cursor:pointer}
 .mmac .chip.m-p{color:var(--pro)} .mmac .chip.m-c{color:var(--carb)} .mmac .chip.m-f{color:var(--fat)}
 .macros.four{grid-template-columns:repeat(4,1fr)}
 .macros.tint b small{font-size:.72rem;font-weight:700;opacity:.8}
+.tlabel{display:flex!important;justify-content:space-between;align-items:baseline;gap:4px}
+.tlabel em{font-style:normal;font-weight:800;font-variant-numeric:tabular-nums}
+.tlabel em.tover::after{content:" ▲";font-size:.65em}
 .tbar{display:block;height:5px;border-radius:3px;background:rgba(127,127,127,.18);margin-top:6px;overflow:hidden}
 .tbar i{display:block;height:100%;border-radius:3px}
 .m-p .tbar i{background:var(--pro-bar)} .m-c .tbar i{background:var(--carb-bar)} .m-f .tbar i{background:var(--fat-bar)}
@@ -186,6 +189,27 @@ dialog.confirm{margin:auto;width:calc(100% - 48px);max-width:360px;border-radius
 .avgs b{display:block;font-weight:800;font-variant-numeric:tabular-nums}
 .avgs span{font-size:.78rem}
 .avgs .m-p b,.avgs .m-p span{color:var(--pro)} .avgs .m-c b,.avgs .m-c span{color:var(--carb)} .avgs .m-f b,.avgs .m-f span{color:var(--fat)}
+.datebtn{background:none;border:0;padding:8px 10px;border-radius:8px;font-size:1.05rem;font-weight:700;font-stretch:90%}
+.datebtn span{color:var(--accent-ink);font-size:.8rem}
+.calnav{display:flex;align-items:center;gap:6px;margin-top:10px}
+.calnav select{flex:1;padding:9px 8px;border:1.5px solid var(--rule);border-radius:6px;background:var(--field);font-weight:700}
+.cgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:10px;text-align:center}
+.cdow{font-size:.78rem;font-weight:800;color:var(--muted);padding:4px 0}
+.cday{position:relative;aspect-ratio:1;border:0;border-radius:50%;background:none;font-weight:600;font-variant-numeric:tabular-nums}
+.cday:disabled{opacity:.3}
+.cday.today{box-shadow:inset 0 0 0 1.5px var(--accent-deep)}
+.cday.sel{background:var(--accent);color:var(--black);font-weight:800}
+.cdot{position:absolute;left:50%;bottom:5px;width:5px;height:5px;margin-left:-2.5px;border-radius:50%;background:var(--accent-deep)}
+.cday.sel .cdot{background:var(--black)}
+.cdot.inline{position:static;display:inline-block;margin:0 4px 1px 0;vertical-align:middle}
+.ranges{display:flex;gap:3px;margin-top:10px;padding-bottom:2px;scrollbar-width:none}
+.ranges button{flex:1 1 0;min-width:0;padding:5px 0}
+.ranges button,.viewtog button{border:1.5px solid var(--rule);background:none;border-radius:999px;font-size:.82rem;font-weight:700;color:var(--muted)}
+.ranges button[aria-pressed="true"],.viewtog button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--black)}
+.viewtog{display:flex;gap:4px}
+.viewtog button{padding:4px 10px}
+.wdot.over{stroke:var(--tomato)}
+.unitrow{display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:.9rem;font-weight:600}
 h2.subpage{font-size:1.2rem;font-weight:800;margin:26px 0 0}
 .toast{position:fixed;left:50%;bottom:calc(80px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:6px;font-weight:700;z-index:50;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.show{opacity:1}
@@ -241,6 +265,12 @@ let S;
 try { S = JSON.parse(localStorage.getItem(KEY)) || blank(); } catch { S = blank(); }
 S.settings ??= { weight:70, goal:2000 }; S.days ??= {}; S.foods ??= []; S.weights ??= [];
 S.settings.waterGoal ??= 8;   // glasses of 250 ml
+S.settings.wUnit ??= "kg";     // weight is always stored in kg; shown in kg or lb
+const LB = 2.20462;
+const wU = () => S.settings.wUnit === "lb" ? "lb" : "kg";
+const toU = kg => wU() === "lb" ? kg * LB : kg;          // kg -> shown unit
+const fromU = v => wU() === "lb" ? v / LB : v;           // shown unit -> kg
+const fmtW = kg => `${r1(toU(kg))} ${wU()}`;
 const COMMON_MACROS = { p:20, c:50, f:30 };   // % of daily calories, a common balanced split
 // Use the common split unless you've chosen your own in Settings (replaces the old 40/40/20 default).
 if (!S.settings.macrosSet) S.settings.macros = { ...COMMON_MACROS };
@@ -406,6 +436,44 @@ function wireWater(d){
   $("#wPlus").onclick = () => { d.water = (d.water || 0) + 1; save(); render(); };
 }
 
+/* ---------- calendar picker ---------- */
+const hasFood = k => (S.days[k]?.food || []).length > 0;
+function openCalendar(y, m){
+  const first = new Date(y, m, 1), startDow = (first.getDay() + 6) % 7;   // Monday first
+  const daysIn = new Date(y, m + 1, 0).getDate(), tk = todayKey();
+  const loggedYears = Object.keys(S.days).filter(hasFood).map(k => +k.slice(0,4));
+  const nowY = new Date().getFullYear(), minY = Math.min(nowY - 3, ...loggedYears);
+  const monthNames = [...Array(12)].map((_, i) => new Date(2000, i, 1).toLocaleDateString(undefined, { month:"long" }));
+  let cells = "";
+  for (let i = 0; i < startDow; i++) cells += `<span></span>`;
+  let count = 0;
+  for (let d = 1; d <= daysIn; d++){
+    const k = keyOf(new Date(y, m, d)), future = k > tk, dot = hasFood(k);
+    if (dot) count++;
+    cells += `<button class="cday ${k === cur ? "sel" : ""} ${k === tk ? "today" : ""}" data-cday="${k}" ${future ? "disabled" : ""}
+      aria-label="${new Date(y,m,d).toLocaleDateString(undefined,{ day:"numeric", month:"long" })}${dot ? ", food logged" : ""}">${d}${dot ? `<i class="cdot"></i>` : ""}</button>`;
+  }
+  const atEnd = y > nowY || (y === nowY && m >= new Date().getMonth());
+  openSheet(head("Pick a date") + `
+    <div class="calnav">
+      <button class="iconbtn" id="cPrev" aria-label="Previous month">‹</button>
+      <select id="cMonth" aria-label="Month">${monthNames.map((n,i) => `<option value="${i}" ${i === m ? "selected" : ""}>${n}</option>`).join("")}</select>
+      <select id="cYear" aria-label="Year">${[...Array(nowY - minY + 1)].map((_, i) => nowY - i).map(v => `<option ${v === y ? "selected" : ""}>${v}</option>`).join("")}</select>
+      <button class="iconbtn" id="cNext" aria-label="Next month" ${atEnd ? "disabled" : ""}>›</button>
+    </div>
+    <div class="cgrid">${["M","T","W","T","F","S","S"].map(d => `<span class="cdow">${d}</span>`).join("")}${cells}</div>
+    <p class="note"><i class="cdot inline"></i> Food logged · ${count} day${count === 1 ? "" : "s"} this month</p>
+    <button class="primary" id="cToday">Go to today</button>`);
+  wireClose();
+  const go = (yy, mm) => { const d = new Date(yy, mm, 1); openCalendar(d.getFullYear(), d.getMonth()); };
+  $("#cPrev").onclick = () => go(y, m - 1);
+  $("#cNext").onclick = () => go(y, m + 1);
+  $("#cMonth").onchange = () => go(+$("#cYear").value, +$("#cMonth").value);
+  $("#cYear").onchange = () => go(+$("#cYear").value, +$("#cMonth").value);
+  document.querySelectorAll("[data-cday]").forEach(b => b.onclick = () => { cur = b.dataset.cday; detail = null; closeSheet(); render(); window.scrollTo(0,0); });
+  $("#cToday").onclick = () => { cur = todayKey(); detail = null; closeSheet(); render(); window.scrollTo(0,0); };
+}
+
 /* ---------- today ---------- */
 function renderToday(){
   const d = day(cur), t = totals(cur), goal = S.settings.goal;
@@ -415,7 +483,7 @@ function renderToday(){
   let html = `
   <div class="datebar">
     <button class="iconbtn" id="prev" aria-label="Previous day">‹</button>
-    <h1>${esc(niceDate(cur))}</h1>
+    <button class="datebtn" id="pickDate" aria-label="Pick a date">${esc(niceDate(cur))} <span aria-hidden="true">▾</span></button>
     <button class="iconbtn" id="next" aria-label="Next day" ${isToday ? "disabled" : ""}>›</button>
   </div>
   <div class="label">
@@ -432,9 +500,10 @@ function renderToday(){
     <div class="bar" aria-hidden="true"><i class="${remaining < 0 ? "over" : ""}" style="width:${Math.max(0,pct)}%"></i></div>
     <div class="macros tint">
       ${[["m-p","Protein","p"],["m-c","Carbs","c"],["m-f","Fat","f"]].map(([cls,name,k]) => {
-        const tg = targets()[k], pct = tg ? Math.min(100, t[k]/tg*100) : 0;
-        return `<div class="${cls}"><b>${r0(t[k])}<small> / ${r0(tg)} g</small></b><span>${name}</span>
-          <i class="tbar" aria-label="${r0(t[k])} of ${r0(tg)} grams"><i style="width:${pct}%"></i></i></div>`;
+        const tg = targets()[k], real = tg ? t[k]/tg*100 : 0, pct = Math.min(100, real);
+        return `<div class="${cls}"><b>${r0(t[k])}<small> / ${r0(tg)} g</small></b>
+          <span class="tlabel"><span>${name}</span><em class="${real > 100 ? "tover" : ""}">${r0(real)}%</em></span>
+          <i class="tbar" aria-label="${r0(t[k])} of ${r0(tg)} grams, ${r0(real)} percent"><i style="width:${pct}%"></i></i></div>`;
       }).join("")}
     </div>
     <div class="macros four">
@@ -444,8 +513,7 @@ function renderToday(){
       <div><b>${r0(t.na)} mg</b><span>Sodium</span></div>
     </div>
     <button class="morelink" data-detail="day">See where ${cur === todayKey() ? "today's" : "this day's"} calories come from ›</button>
-  </div>
-  ${waterCard(d)}`;
+  </div>`;
   MEALS.forEach(m => {
     const items = d.food.filter(e => e.meal === m);
     const sum = items.reduce((a,e) => ({ kcal:a.kcal+e.kcal, p:a.p+e.p, c:a.c+e.c, f:a.f+e.f, fi:a.fi+(e.fi||0), su:a.su+(e.su||0), sf:a.sf+(e.sf||0), na:a.na+(e.na||0) }), { kcal:0, p:0, c:0, f:0, fi:0, su:0, sf:0, na:0 });
@@ -467,9 +535,11 @@ function renderToday(){
     <span class="it-kcal">${r0(e.kcal)}</span><button class="del" data-del-ex="${e.id}" aria-label="Remove ${esc(e.name)}">✕</button></li>`;
   });
   html += `</ul><button class="addline" id="addEx">+ Add exercise</button></section>`;
+  html += waterCard(d);
   $("#app").innerHTML = html;
 
   $("#prev").onclick = () => { const x = fromKey(cur); x.setDate(x.getDate()-1); cur = keyOf(x); render(); };
+  $("#pickDate").onclick = () => { const x = fromKey(cur); openCalendar(x.getFullYear(), x.getMonth()); };
   $("#next").onclick = () => { const x = fromKey(cur); x.setDate(x.getDate()+1); cur = keyOf(x); render(); };
   $("#addEx").onclick = openExercise;
   wireWater(d);
@@ -927,7 +997,7 @@ function openExercise(){
     <div id="exFields"></div>
     <div class="chips" id="exCalc"></div>
     <button class="primary" id="exAdd">Add exercise</button>
-    <p class="note">Estimate based on your weight (${r1(S.settings.weight)} kg). Change it in Settings.</p>`);
+    <p class="note">Estimate based on your weight (${fmtW(S.settings.weight)}). Change it in Settings.</p>`);
   wireClose();
   const draw = () => {
     const custom = $("#act").value === "custom";
@@ -960,74 +1030,128 @@ function openExercise(){
 }
 
 /* ---------- history ---------- */
-function weekCard(){
-  const goal = S.settings.goal, days = [];
-  for (let i = 6; i >= 0; i--){ const d = new Date(); d.setDate(d.getDate() - i); const k = keyOf(d); days.push({ k, d, t:totals(k), w:(S.days[k]?.water || 0) }); }
-  const logged = days.filter(x => x.t.kcal > 0);
-  const avg = key => logged.length ? logged.reduce((a,x) => a + x.t[key], 0) / logged.length : 0;
-  const max = Math.max(goal * 1.15, ...days.map(x => x.t.kcal)) || 1;
-  const W = 320, H = 150, top = 10, bottom = 22, bw = 28, gap = (W - bw * 7) / 7;
+const RANGES = [["7D",7],["1M",30],["3M",91],["6M",182],["1Y",365],["2Y",730],["3Y",1095],["All",0]];
+let calRange = "7D", calView = "bar", wRange = "7D";
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const today0 = () => { const d = new Date(); d.setHours(0,0,0,0); return d; };
+function rangeStart(key, earliest){
+  const n = RANGES.find(r => r[0] === key)[1];
+  if (n) return addDays(today0(), -(n - 1));
+  return earliest ? fromKey(earliest) : addDays(today0(), -6);
+}
+const rangeButtons = (which, sel) => `<div class="ranges" role="group" aria-label="Time range">${RANGES.map(([k]) =>
+  `<button data-${which}="${k}" aria-pressed="${k === sel}">${k}</button>`).join("")}</div>`;
+function tickLabel(d, spanDays){
+  if (spanDays <= 7) return d.toLocaleDateString(undefined, { weekday:"narrow" });
+  if (spanDays <= 92) return d.toLocaleDateString(undefined, { day:"numeric", month:"short" });
+  return d.toLocaleDateString(undefined, { month:"short", year:"2-digit" });
+}
+
+function calCard(){
+  const goal = S.settings.goal;
+  const logged = Object.keys(S.days).filter(hasFood).sort();
+  const start = rangeStart(calRange, logged[0]), end = today0();
+  const spanDays = Math.round((end - start) / 864e5) + 1;
+  // one point per day, or per week for long ranges
+  const step = spanDays > 92 ? 7 : 1, pts = [];
+  for (let i = 0; i < spanDays; i += step){
+    const ks = []; for (let j = 0; j < step && i + j < spanDays; j++) ks.push(keyOf(addDays(start, i + j)));
+    const tt = ks.map(totals).filter(t => t.kcal > 0);
+    pts.push({ d:addDays(start, i), v: tt.length ? tt.reduce((a,t) => a + t.kcal, 0) / tt.length : null });
+  }
+  const inRange = [];
+  for (let i = 0; i < spanDays; i++){ const t = totals(keyOf(addDays(start, i))); if (t.kcal > 0) inRange.push(t); }
+  const avg = key => inRange.length ? inRange.reduce((a,t) => a + t[key], 0) / inRange.length : 0;
+
+  const W = 320, H = 160, top = 14, bottom = 22, left = 4, right = 4;
+  const vals = pts.map(p => p.v).filter(v => v != null);
+  const max = Math.max(goal * 1.15, ...vals, 1);
   const y = v => top + (H - top - bottom) * (1 - v / max);
-  let bars = "";
-  days.forEach((x, i) => {
-    const bx = gap/2 + i * (bw + gap), by = y(x.t.kcal), over = x.t.kcal > goal;
-    bars += `<rect x="${bx}" y="${by}" width="${bw}" height="${Math.max(0, H - bottom - by)}" rx="4" class="${over ? "wbar over" : "wbar"}"><title>${r0(x.t.kcal)} kcal</title></rect>
-      <text x="${bx + bw/2}" y="${H - 6}" text-anchor="middle" class="wlbl">${x.d.toLocaleDateString(undefined,{ weekday:"narrow" })}</text>`;
-    if (x.t.kcal) bars += `<text x="${bx + bw/2}" y="${by - 3}" text-anchor="middle" class="wval">${r0(x.t.kcal)}</text>`;
-  });
-  const gy = y(goal);
+  const n = pts.length, slot = (W - left - right) / n;
+  const cx = i => left + slot * (i + 0.5);
+  let body = "";
+  if (calView === "bar"){
+    const bw = Math.max(1.5, slot * (n <= 14 ? 0.62 : 0.72));
+    pts.forEach((p, i) => { if (p.v == null) return;
+      body += `<rect x="${cx(i) - bw/2}" y="${y(p.v)}" width="${bw}" height="${H - bottom - y(p.v)}" rx="${Math.min(4, bw/3)}" class="wbar ${p.v > goal ? "over" : ""}"><title>${r0(p.v)} kcal</title></rect>`;
+      if (n <= 7) body += `<text x="${cx(i)}" y="${y(p.v) - 3}" text-anchor="middle" class="wval">${r0(p.v)}</text>`;
+    });
+  } else {
+    let seg = [];
+    const flush = () => { if (seg.length > 1) body += `<polyline points="${seg.join(" ")}" class="wline"/>`; seg = []; };
+    pts.forEach((p, i) => { if (p.v == null) { flush(); return; } seg.push(`${cx(i).toFixed(1)},${y(p.v).toFixed(1)}`); });
+    flush();
+    if (n <= 31) pts.forEach((p, i) => { if (p.v != null) body += `<circle cx="${cx(i)}" cy="${y(p.v)}" r="3" class="wdot ${p.v > goal ? "over" : ""}"><title>${r0(p.v)} kcal</title></circle>`; });
+    if (n <= 7) pts.forEach((p, i) => { if (p.v != null) body += `<text x="${cx(i)}" y="${y(p.v) - 7}" text-anchor="middle" class="wval">${r0(p.v)}</text>`; });
+  }
+  // x labels: all 7 for a week, otherwise ~5 spread out
+  const ticks = n <= 7 ? pts.map((_, i) => i) : [0, 1, 2, 3, 4].map(t => Math.round(t * (n - 1) / 4));
+  const labels = ticks.map((i, j) => `<text x="${cx(i)}" y="${H - 6}" text-anchor="${n <= 7 ? "middle" : j === 0 ? "start" : j === ticks.length - 1 ? "end" : "middle"}" class="wlbl">${tickLabel(pts[i].d, spanDays)}</text>`).join("");
   return `<section class="card">
-    <div class="whead"><h2>Last 7 days</h2><span>Goal ${r0(goal)} kcal</span></div>
-    <svg viewBox="0 0 ${W} ${H}" class="wchart" role="img" aria-label="Calories eaten each day for the last 7 days">
-      <line x1="0" x2="${W}" y1="${gy}" y2="${gy}" class="wgoal"/>${bars}</svg>
-    ${logged.length ? `<p class="note" style="margin-top:2px">Daily average over ${logged.length} logged day${logged.length === 1 ? "" : "s"}:</p>
+    <div class="whead"><h2>Calories</h2>
+      <div class="viewtog" role="group" aria-label="Chart type"><button data-cview="bar" aria-pressed="${calView === "bar"}">Bars</button><button data-cview="line" aria-pressed="${calView === "line"}">Line</button></div></div>
+    ${rangeButtons("crange", calRange)}
+    <svg viewBox="0 0 ${W} ${H}" class="wchart" role="img" aria-label="Calories eaten, ${calRange}">
+      <line x1="0" x2="${W}" y1="${y(goal)}" y2="${y(goal)}" class="wgoal"/>${body}${labels}</svg>
+    <p class="note" style="margin-top:0">Dashed line: your ${r0(goal)} kcal goal${step > 1 ? ". Each point is a weekly average" : ""}.</p>
+    ${inRange.length ? `<p class="note" style="margin-top:2px">Daily average over ${inRange.length} logged day${inRange.length === 1 ? "" : "s"}:</p>
     <div class="avgs">
       <div><b>${r0(avg("kcal"))}</b><span>kcal</span></div>
       <div class="m-p"><b>${r0(avg("p"))} g</b><span>Protein</span></div>
       <div class="m-c"><b>${r0(avg("c"))} g</b><span>Carbs</span></div>
       <div class="m-f"><b>${r0(avg("f"))} g</b><span>Fat</span></div>
-    </div>` : `<p class="empty">Log some food and your week will show up here.</p>`}
+    </div>` : `<p class="empty">No food logged in this period.</p>`}
   </section>`;
 }
+
 function weightCard(){
   const list = [...S.weights].sort((a,b) => a.d.localeCompare(b.d));
   const last = list[list.length - 1];
+  const start = rangeStart(wRange, list[0]?.d), end = today0();
+  const sk = keyOf(start), pts = list.filter(w => w.d >= sk).map(w => ({ ...w, v:toU(w.kg) }));
+  const spanDays = Math.round((end - start) / 864e5) + 1;
   let chart = "";
-  const pts = list.slice(-60);
-  if (pts.length >= 2){
-    const W = 320, H = 140, pad = 14, lpad = 34;
-    const ws = pts.map(p => p.kg), lo = Math.min(...ws), hi = Math.max(...ws), span = Math.max(1, hi - lo);
-    const t0 = fromKey(pts[0].d).getTime(), t1 = fromKey(pts[pts.length-1].d).getTime(), ts = Math.max(1, t1 - t0);
-    const X = p => lpad + (W - lpad - pad) * (fromKey(p.d).getTime() - t0) / ts;
-    const Y = kg => pad + (H - pad * 2) * (1 - (kg - (lo - span*0.15)) / (span * 1.3));
-    const line = pts.map(p => `${X(p).toFixed(1)},${Y(p.kg).toFixed(1)}`).join(" ");
-    chart = `<svg viewBox="0 0 ${W} ${H}" class="wchart" role="img" aria-label="Weight trend">
-      <text x="0" y="${Y(hi)+4}" class="wlbl">${r1(hi)}</text><text x="0" y="${Y(lo)+4}" class="wlbl">${r1(lo)}</text>
+  if (pts.length){
+    const W = 320, H = 150, top = 12, bottom = 22, lpad = 34, rpad = 8;
+    const ws = pts.map(p => p.v), lo = Math.min(...ws), hi = Math.max(...ws);
+    const mid = (hi + lo) / 2, half = Math.max(wU() === "lb" ? 1.3 : 0.6, (hi - lo) / 2) * 1.25;   // keep the line centred
+    const t0 = start.getTime(), ts = Math.max(1, end.getTime() - t0);
+    const X = d => lpad + (W - lpad - rpad) * (fromKey(d).getTime() - t0) / ts;
+    const Y = kg => top + (H - top - bottom) * (1 - (kg - (mid - half)) / (2 * half));
+    const line = pts.map(p => `${X(p.d).toFixed(1)},${Y(p.v).toFixed(1)}`).join(" ");
+    const ticks = spanDays <= 7 ? [...Array(7)].map((_, i) => addDays(start, i)) : [0,1,2,3,4].map(t => addDays(start, Math.round(t * (spanDays - 1) / 4)));
+    chart = `<svg viewBox="0 0 ${W} ${H}" class="wchart" role="img" aria-label="Weight trend, ${wRange}">
+      <text x="0" y="${Y(hi)+4}" class="wlbl">${r1(hi)}</text>${hi !== lo ? `<text x="0" y="${Y(lo)+4}" class="wlbl">${r1(lo)}</text>` : ""}
       <line x1="${lpad}" x2="${W}" y1="${Y(hi)}" y2="${Y(hi)}" class="wgrid"/><line x1="${lpad}" x2="${W}" y1="${Y(lo)}" y2="${Y(lo)}" class="wgrid"/>
-      <polyline points="${line}" class="wline"/>
-      ${pts.map(p => `<circle cx="${X(p)}" cy="${Y(p.kg)}" r="3.2" class="wdot"><title>${r1(p.kg)} kg</title></circle>`).join("")}
+      ${pts.length > 1 ? `<polyline points="${line}" class="wline"/>` : ""}
+      ${pts.length <= 60 ? pts.map(p => `<circle cx="${X(p.d)}" cy="${Y(p.v)}" r="3.2" class="wdot"><title>${r1(p.v)} ${wU()}</title></circle>`).join("") : ""}
+      ${ticks.map((d, j) => `<text x="${X(keyOf(d))}" y="${H - 6}" text-anchor="${spanDays <= 7 ? "middle" : j === 0 ? "start" : j === ticks.length - 1 ? "end" : "middle"}" class="wlbl">${tickLabel(d, spanDays)}</text>`).join("")}
     </svg>`;
-    const first = pts[0], diff = last.kg - first.kg;
-    chart += `<p class="note" style="margin-top:0">${diff === 0 ? "No change" : (diff > 0 ? "+" : "−") + r1(Math.abs(diff)) + " kg"} since ${fromKey(first.d).toLocaleDateString(undefined,{ day:"numeric", month:"short" })}</p>`;
-  } else if (pts.length === 1){
-    chart = `<p class="note">Add another weigh-in on a different day to see your trend.</p>`;
+    if (pts.length > 1){
+      const diff = pts[pts.length-1].v - pts[0].v;
+      chart += `<p class="note" style="margin-top:0">${Math.abs(diff) < 0.05 ? "No change" : (diff > 0 ? "+" : "−") + r1(Math.abs(diff)) + " " + wU()} in this period (${pts.length} weigh-ins)</p>`;
+    } else chart += `<p class="note" style="margin-top:0">Only one weigh-in in this period. Try a longer range, or keep logging to see a trend.</p>`;
+  } else {
+    chart = `<p class="empty">${list.length ? "No weigh-ins in this period. Try a longer range." : "Save your first weigh-in above to start your trend."}</p>`;
   }
-  const recent = [...list].reverse().slice(0, 8);
+  const recent = [...list].reverse().slice(0, 5);
   return `<section class="card">
-    <div class="whead"><h2>Weight</h2><span>${last ? `<b>${r1(last.kg)} kg</b>` : ""}</span></div>
+    <div class="whead"><h2>Weight</h2><span>${last ? `<b>${fmtW(last.kg)}</b>` : ""}</span></div>
     <div style="display:flex;gap:8px;align-items:flex-end">
-      <label class="f" style="flex:1;margin-top:6px">Today's weight (kg)<input id="wIn" type="number" inputmode="decimal" step="0.1" min="1" value="${last ? r1(last.kg) : r1(S.settings.weight)}"></label>
+      <label class="f" style="flex:1;margin-top:6px">Today's weight (${wU()})<input id="wIn" type="number" inputmode="decimal" step="0.1" min="1" value="${r1(toU(last ? last.kg : S.settings.weight))}"></label>
       <button class="secondary" id="wSave" style="height:46px">Save</button>
     </div>
+    ${rangeButtons("wrange", wRange)}
     ${chart}
-    ${recent.length ? `<ul class="items">${recent.map(w => `<li><div class="it-main"><div class="it-name">${r1(w.kg)} kg</div>
+    ${recent.length ? `<p class="subhead" style="margin-top:12px">Recent weigh-ins</p><ul class="items">${recent.map(w => `<li><div class="it-main"><div class="it-name">${fmtW(w.kg)}</div>
       <div class="it-sub">${esc(niceDate(w.d))}</div></div><button class="del" data-wdel="${w.d}" aria-label="Remove weigh-in">✕</button></li>`).join("")}</ul>` : ""}
     <p class="note">Weigh yourself at the same time of day, like in the morning, for the most reliable trend.</p>
   </section>`;
 }
+
 function renderHistory(){
   const goal = S.settings.goal;
-  let html = `<h2 class="page">History</h2>` + weekCard() + weightCard() + `<h2 class="subpage">Past days</h2><ul class="items hist">`;
+  let html = `<h2 class="page">History</h2>` + calCard() + weightCard() + `<h2 class="subpage">Past days</h2><ul class="items hist">`;
   let any = false;
   for (let i = 0; i < 30; i++){
     const d = new Date(); d.setDate(d.getDate() - i);
@@ -1046,9 +1170,14 @@ function renderHistory(){
   else html += `<p class="note">Right-hand number is net calories (food minus exercise). Tap a day to open it.</p>`;
   $("#app").innerHTML = html;
   document.querySelectorAll("[data-day]").forEach(li => li.onclick = () => { cur = li.dataset.day; tab = "today"; detail = null; render(); window.scrollTo(0,0); });
+  const keepScroll = fn => () => { const y = window.scrollY; fn(); render(); window.scrollTo(0, y); };
+  document.querySelectorAll("[data-crange]").forEach(b => b.onclick = keepScroll(() => calRange = b.dataset.crange));
+  document.querySelectorAll("[data-wrange]").forEach(b => b.onclick = keepScroll(() => wRange = b.dataset.wrange));
+  document.querySelectorAll("[data-cview]").forEach(b => b.onclick = keepScroll(() => calView = b.dataset.cview));
   $("#wSave").onclick = () => {
-    const kg = parseFloat($("#wIn").value);
-    if (!(kg > 0)){ toast("Enter your weight"); return; }
+    const v = parseFloat($("#wIn").value);
+    if (!(v > 0)){ toast("Enter your weight"); return; }
+    const kg = Math.round(fromU(v) * 100) / 100;
     const k = todayKey();
     S.weights = S.weights.filter(w => w.d !== k); S.weights.push({ d:k, kg });
     S.settings.weight = kg;   // keeps exercise estimates up to date
@@ -1056,7 +1185,7 @@ function renderHistory(){
   };
   document.querySelectorAll("[data-wdel]").forEach(b => b.onclick = async () => {
     const w = S.weights.find(x => x.d === b.dataset.wdel); if (!w) return;
-    if (!await askConfirm(`Remove ${r1(w.kg)} kg?`, niceDate(w.d))) return;
+    if (!await askConfirm(`Remove ${fmtW(w.kg)}?`, niceDate(w.d))) return;
     S.weights = S.weights.filter(x => x.d !== w.d); save(); render(); toast("Removed");
   });
 }
@@ -1067,8 +1196,12 @@ function renderSettings(){
     <h2 class="page">Settings</h2>
     <div class="grid2">
       <label class="f">Daily calorie goal<input id="sGoal" type="number" inputmode="numeric" min="0" value="${r0(S.settings.goal)}"></label>
-      <label class="f">Body weight (kg)<input id="sWeight" type="number" inputmode="decimal" min="1" step="0.1" value="${r1(S.settings.weight)}"></label>
+      <label class="f">Body weight (<span id="wUnitLbl">${wU()}</span>)<input id="sWeight" type="number" inputmode="decimal" min="1" step="0.1" value="${r1(toU(S.settings.weight))}"></label>
     </div>
+    <div class="unitrow"><span>Weight unit</span>
+      <div class="viewtog" role="group" aria-label="Weight unit">
+        <button data-unit="kg" aria-pressed="${wU() === "kg"}">kg</button><button data-unit="lb" aria-pressed="${wU() === "lb"}">lb</button>
+      </div></div>
     <p class="note">Weight is used to estimate calories burned during exercise. Saving a weigh-in in History updates it too.</p>
     <label class="f">Water goal (glasses of 250 ml)<input id="sWater" type="number" inputmode="numeric" min="1" max="30" value="${S.settings.waterGoal}"></label>
 
@@ -1094,7 +1227,7 @@ function renderSettings(){
       <button class="secondary danger" id="wipe">Delete all data</button>
     </div>
     <p class="note" style="margin-top:28px">Barcode data from Open Food Facts (openfoodfacts.org). Food search data from USDA FoodData Central (fdc.nal.usda.gov).</p>
-    <p class="note">MeraFood version 14</p>`;
+    <p class="note">MeraFood version 17</p>`;
   const mp = () => ({ p:parseFloat($("#mpP").value)||0, c:parseFloat($("#mpC").value)||0, f:parseFloat($("#mpF").value)||0 });
   const showMacros = () => {
     const m = mp(), total = m.p + m.c + m.f, g = parseFloat($("#sGoal").value) || 0;
@@ -1107,9 +1240,18 @@ function renderSettings(){
   };
   ["#mpP","#mpC","#mpF","#sGoal"].forEach(id => $(id).addEventListener("input", showMacros));
   showMacros();
+  document.querySelectorAll("[data-unit]").forEach(b => b.onclick = () => {
+    if (b.dataset.unit === wU()) return;
+    const typedKg = fromU(parseFloat($("#sWeight").value) || 0);   // keep what's typed, in the new unit
+    S.settings.wUnit = b.dataset.unit; save();
+    document.querySelectorAll("[data-unit]").forEach(x => x.setAttribute("aria-pressed", x.dataset.unit === wU()));
+    $("#wUnitLbl").textContent = wU();
+    if (typedKg) $("#sWeight").value = r1(toU(typedKg));
+    toast(`Weight now shown in ${wU()}`);
+  });
   $("#mpReset").onclick = () => { $("#mpP").value = COMMON_MACROS.p; $("#mpC").value = COMMON_MACROS.c; $("#mpF").value = COMMON_MACROS.f; showMacros(); toast("Tap Save settings to keep it"); };
   $("#sSave").onclick = () => {
-    const g = parseFloat($("#sGoal").value), w = parseFloat($("#sWeight").value);
+    const g = parseFloat($("#sGoal").value), w = fromU(parseFloat($("#sWeight").value));
     if (!(g > 0) || !(w > 0)){ toast("Enter a goal and weight above zero"); return; }
     const m = mp();
     if (m.p + m.c + m.f !== 100){ toast("Protein, carbs and fat must add up to 100%"); return; }
