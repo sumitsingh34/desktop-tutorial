@@ -1,5 +1,5 @@
 // MeraFood service worker: lets the app open offline.
-const CACHE = "merafood-v3";
+const CACHE = "merafood-v6";
 const SHELL = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", e => {
@@ -16,7 +16,7 @@ self.addEventListener("fetch", e => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   // Food lookups always go to the internet.
-  if (url.hostname.endsWith("openfoodfacts.org")) return;
+  if (url.hostname.endsWith("openfoodfacts.org") || url.hostname.endsWith("nal.usda.gov")) return;
   // Try the network first so updates show up, fall back to the saved copy when offline.
   e.respondWith(
     fetch(req).then(res => {
