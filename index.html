@@ -14,14 +14,14 @@
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
 :root{
-  --paper:#FBF8F4; --ink:#3A302A; --muted:#7D7168; --rule:#E3D8CC; --rule2:#CDBFB1; --soft:#F0E8DF; --bar:#FFFFFF; --pro-bg:#E2F0E6; --pro:#2E6B45; --carb-bg:#FBEBC6; --carb:#7F5300; --fat-bg:#ECE6F6; --fat:#5A4889;
+  --paper:#FBF8F4; --ink:#3A302A; --muted:#7D7168; --rule:#E3D8CC; --rule2:#CDBFB1; --soft:#F0E8DF; --bar:#FFFFFF; --pro-bg:#E2F0E6; --pro:#2E6B45; --carb-bg:#FBEBC6; --carb:#7F5300; --fat-bg:#ECE6F6; --fat:#5A4889; --pro-bar:#4E9E6B; --carb-bar:#E3A536; --fat-bar:#8E7CC9;
   --gerua:#D9661F; --gerua-ink:#A9480D; --black:#2B1D12; --tomato:#C0392B; --field:#FFFFFF;
   --font:"Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
   box-sizing:border-box;
   padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
 }
 @media (prefers-color-scheme:dark){
-  :root:not([data-theme="light"]){ --paper:#1E1A17; --ink:#EDE6DE; --muted:#A89C91; --rule:#3A322C; --rule2:#4D433B; --soft:#2A2420; --bar:#26211D; --pro-bg:#1E3326; --pro:#93D3A8; --carb-bg:#3A2E14; --carb:#F1C66E; --fat-bg:#2C2739; --fat:#C2B5EC; --gerua:#EE7F35; --gerua-ink:#F29A5A; --tomato:#FF7B6B; --field:#26211D; }
+  :root:not([data-theme="light"]){ --paper:#1E1A17; --ink:#EDE6DE; --muted:#A89C91; --rule:#3A322C; --rule2:#4D433B; --soft:#2A2420; --bar:#26211D; --pro-bg:#1E3326; --pro:#93D3A8; --carb-bg:#3A2E14; --carb:#F1C66E; --fat-bg:#2C2739; --fat:#C2B5EC; --pro-bar:#6DBB88; --carb-bar:#E8B04A; --fat-bar:#A493DE; --gerua:#EE7F35; --gerua-ink:#F29A5A; --tomato:#FF7B6B; --field:#26211D; }
 }
 *,*::before,*::after{box-sizing:inherit}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
@@ -73,6 +73,21 @@ button{cursor:pointer}
 /* sections */
 section.meal{margin-top:22px}
 .mhead{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid var(--rule2);padding-bottom:3px}
+button.mhead{width:100%;background:none;border-top:0;border-left:0;border-right:0;padding:0 0 3px;text-align:left;color:inherit;cursor:pointer}
+.chev{font-style:normal;color:var(--gerua-ink);font-weight:800;margin-left:2px}
+.morelink{display:block;width:100%;margin-top:12px;padding:10px 0 0;border:0;border-top:1px solid var(--rule);background:none;text-align:left;font-weight:800;color:var(--gerua-ink)}
+.subhead{margin:10px 0 6px;font-weight:800}
+.split{display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--soft);margin-top:6px}
+.split.big{height:16px;border-radius:8px;margin:4px 0 10px}
+.split i{display:block;height:100%}
+.sp{background:var(--pro-bar)} .sc{background:var(--carb-bar)} .sf{background:var(--fat-bar)}
+.brow{display:flex;justify-content:space-between;align-items:center;border-radius:8px;padding:9px 12px;margin-top:6px}
+.brow b{display:block;font-weight:800}
+.brow span{font-size:.85rem}
+.brow.m-p span,.brow.m-p b{color:var(--pro)} .brow.m-c span,.brow.m-c b{color:var(--carb)} .brow.m-f span,.brow.m-f b{color:var(--fat)}
+.bnum{text-align:right;font-variant-numeric:tabular-nums}
+.key{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 4px 0 10px;vertical-align:-1px}
+.key:first-child{margin-left:0}
 .mhead h2{margin:0;padding-left:10px;border-left:6px solid var(--gerua);font-size:1.25rem;font-weight:800;font-stretch:85%}
 .mhead span{font-weight:700;font-variant-numeric:tabular-nums}
 .mmac{display:flex;gap:8px 12px;align-items:center;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--rule);font-size:.9rem;color:var(--muted)}
@@ -201,9 +216,94 @@ let cur = todayKey();
 
 function render(){
   document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-current", b.dataset.tab === tab ? "page" : "false"));
-  if (tab === "today") renderToday();
+  if (tab === "today") (detail ? renderDetail() : renderToday());
   else if (tab === "history") renderHistory();
   else renderSettings();
+}
+
+/* ---------- breakdown screen ---------- */
+let detail = null;   // null, "day", or a meal name
+function sumOf(items){
+  const t = { kcal:0, p:0, c:0, f:0, fi:0, su:0, sf:0, na:0 };
+  items.forEach(e => NUT.forEach(k => t[k] += +e[k] || 0));
+  return t;
+}
+function split(t){
+  const p = t.p*4, c = t.c*4, f = t.f*9, sum = p + c + f;
+  const pct = x => sum ? x / sum * 100 : 0;
+  return { p, c, f, sum, pp:pct(p), pc:pct(c), pf:pct(f) };
+}
+function splitBar(t, cls = ""){
+  const s = split(t);
+  if (!s.sum) return `<div class="split ${cls}"></div>`;
+  return `<div class="split ${cls}" role="img" aria-label="Protein ${r0(s.pp)}%, carbs ${r0(s.pc)}%, fat ${r0(s.pf)}%">
+    <i class="sp" style="width:${s.pp}%"></i><i class="sc" style="width:${s.pc}%"></i><i class="sf" style="width:${s.pf}%"></i></div>`;
+}
+function renderDetail(){
+  const d = day(cur), isDay = detail === "day";
+  const items = isDay ? d.food : d.food.filter(e => e.meal === detail);
+  const t = sumOf(items), s = split(t);
+  const row = (cls, name, g, kcal, pct, mult) => `
+    <div class="brow ${cls}">
+      <div><b>${name}</b><span>${r1(g)} g × ${mult} kcal</span></div>
+      <div class="bnum"><b>${r0(kcal)} kcal</b><span>${r0(pct)}%</span></div>
+    </div>`;
+  let html = `
+  <div class="datebar">
+    <button class="iconbtn" id="dBack" aria-label="Back to today">‹</button>
+    <h1>${isDay ? "Whole day" : esc(detail)}, ${esc(niceDate(cur).replace(/^(Today|Yesterday), /, ""))}</h1>
+    <span style="width:44px"></span>
+  </div>
+  <div class="label">
+    <p class="title">${r0(t.kcal)} kcal</p>
+    <p class="note" style="margin:0">${isDay ? (cur === todayKey() ? "Eaten today" : "Eaten this day") : "Eaten at " + esc(detail.toLowerCase())}</p>
+    <div class="rule-thick"></div>
+    <p class="subhead">Where the calories come from</p>
+    ${splitBar(t, "big")}
+    ${s.sum ? row("m-p","Protein",t.p,s.p,s.pp,4) + row("m-c","Carbs",t.c,s.c,s.pc,4) + row("m-f","Fat",t.f,s.f,s.pf,9)
+            : `<p class="empty">Nothing logged ${isDay ? "for this day" : "for " + esc(detail.toLowerCase())} yet.</p>`}
+    ${s.sum ? `<p class="note">Protein and carbs have 4 kcal per gram, fat has 9. Labels round their numbers and count fiber differently, so this adds up to ${r0(s.sum)} kcal, close to but not always exactly the total above.</p>` : ""}
+    <div class="macros four" style="margin-top:12px">
+      <div><b>${r0(t.fi)} g</b><span>Fiber</span></div>
+      <div><b>${r0(t.su)} g</b><span>Sugar</span></div>
+      <div><b>${r0(t.sf)} g</b><span>Sat fat</span></div>
+      <div><b>${r0(t.na)} mg</b><span>Sodium</span></div>
+    </div>
+  </div>`;
+  if (isDay){
+    html += `<section class="meal"><div class="mhead"><h2>By meal</h2></div><ul class="items">`;
+    MEALS.forEach(m => {
+      const mt = sumOf(d.food.filter(e => e.meal === m));
+      const share = t.kcal ? mt.kcal / t.kcal * 100 : 0;
+      html += `<li><div class="it-main tap" data-detail="${m}" role="button" tabindex="0">
+        <div class="it-name">${m} <span class="it-sub">· ${r0(share)}% of the day</span></div>
+        <div class="it-sub">P ${r0(mt.p)} g · C ${r0(mt.c)} g · F ${r0(mt.f)} g</div>${splitBar(mt)}</div>
+        <span class="it-kcal">${r0(mt.kcal)}</span></li>`;
+    });
+    html += `</ul></section>`;
+  } else {
+    html += `<section class="meal"><div class="mhead"><h2>Foods</h2><span>${items.length}</span></div><ul class="items">`;
+    items.forEach(e => {
+      const share = t.kcal ? e.kcal / t.kcal * 100 : 0;
+      html += `<li><div class="it-main tap" data-edit-food="${e.id}" role="button" tabindex="0">
+        <div class="it-name">${esc(e.name)}</div>
+        <div class="it-sub">${esc(e.amount)} · ${r0(share)}% of this meal · P ${r0(e.p)} · C ${r0(e.c)} · F ${r0(e.f)}</div>${splitBar(e)}</div>
+        <span class="it-kcal">${r0(e.kcal)}</span></li>`;
+    });
+    html += `</ul><button class="addline" data-add-meal="${detail}">+ Add food</button></section>`;
+  }
+  html += `<p class="note" style="margin-top:16px"><span class="key sp"></span>Protein <span class="key sc"></span>Carbs <span class="key sf"></span>Fat</p>`;
+  $("#app").innerHTML = html;
+  $("#dBack").onclick = () => { detail = null; render(); window.scrollTo(0,0); };
+  document.querySelectorAll("[data-detail]").forEach(el => {
+    const go = () => { detail = el.dataset.detail; render(); window.scrollTo(0,0); };
+    el.onclick = go; el.onkeydown = ev => { if (ev.key === "Enter") go(); };
+  });
+  document.querySelectorAll("[data-add-meal]").forEach(b => b.onclick = () => openFood(b.dataset.addMeal));
+  document.querySelectorAll("[data-edit-food]").forEach(el => {
+    const open = () => { const e = d.food.find(x => x.id === el.dataset.editFood); if (e) { foodMeal = e.meal; showPortion(entryFood(e), e); } };
+    el.onclick = open; el.onkeydown = ev => { if (ev.key === "Enter") open(); };
+  });
 }
 
 /* ---------- today ---------- */
@@ -241,11 +341,12 @@ function renderToday(){
       <div><b>${r0(t.sf)} g</b><span>Sat fat</span></div>
       <div><b>${r0(t.na)} mg</b><span>Sodium</span></div>
     </div>
+    <button class="morelink" data-detail="day">See where ${cur === todayKey() ? "today's" : "this day's"} calories come from ›</button>
   </div>`;
   MEALS.forEach(m => {
     const items = d.food.filter(e => e.meal === m);
     const sum = items.reduce((a,e) => ({ kcal:a.kcal+e.kcal, p:a.p+e.p, c:a.c+e.c, f:a.f+e.f, fi:a.fi+(e.fi||0), su:a.su+(e.su||0), sf:a.sf+(e.sf||0), na:a.na+(e.na||0) }), { kcal:0, p:0, c:0, f:0, fi:0, su:0, sf:0, na:0 });
-    html += `<section class="meal"><div class="mhead"><h2>${m}</h2><span>${r0(sum.kcal)} kcal</span></div>
+    html += `<section class="meal"><button class="mhead tap" data-detail="${m}" aria-label="${m} details, ${r0(sum.kcal)} kcal"><h2>${m}</h2><span>${r0(sum.kcal)} kcal <i class="chev" aria-hidden="true">›</i></span></button>
       ${items.length ? `<div class="mmac"><span class="chip m-p">Protein <b>${r0(sum.p)} g</b></span><span class="chip m-c">Carbs <b>${r0(sum.c)} g</b></span><span class="chip m-f">Fat <b>${r0(sum.f)} g</b></span><span>Fiber <b>${r0(sum.fi)} g</b></span><span>Sugar <b>${r0(sum.su)} g</b></span><span>Sat fat <b>${r0(sum.sf)} g</b></span><span>Sodium <b>${r0(sum.na)} mg</b></span></div>` : ""}
       <ul class="items">`;
     items.forEach(e => {
@@ -267,6 +368,7 @@ function renderToday(){
   $("#next").onclick = () => { const x = fromKey(cur); x.setDate(x.getDate()+1); cur = keyOf(x); render(); };
   $("#addEx").onclick = openExercise;
   document.querySelectorAll("[data-add-meal]").forEach(b => b.onclick = () => openFood(b.dataset.addMeal));
+  document.querySelectorAll("[data-detail]").forEach(b => b.onclick = () => { detail = b.dataset.detail; render(); window.scrollTo(0,0); });
   document.querySelectorAll("[data-edit-food]").forEach(el => {
     const open = () => { const e = d.food.find(x => x.id === el.dataset.editFood); if (e) { foodMeal = e.meal; showPortion(entryFood(e), e); } };
     el.onclick = open; el.onkeydown = ev => { if (ev.key === "Enter") open(); };
@@ -655,7 +757,7 @@ function renderHistory(){
   if (!any) html += `<p class="empty">Days you log will show up here.</p>`;
   else html += `<p class="note">Right-hand number is net calories (food minus exercise). Tap a day to open it.</p>`;
   $("#app").innerHTML = html;
-  document.querySelectorAll("[data-day]").forEach(li => li.onclick = () => { cur = li.dataset.day; tab = "today"; render(); window.scrollTo(0,0); });
+  document.querySelectorAll("[data-day]").forEach(li => li.onclick = () => { cur = li.dataset.day; tab = "today"; detail = null; render(); window.scrollTo(0,0); });
 }
 
 /* ---------- settings ---------- */
@@ -708,7 +810,7 @@ function renderSettings(){
 }
 
 /* ---------- boot ---------- */
-document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => { tab = b.dataset.tab; if (tab === "today") cur = cur || todayKey(); render(); window.scrollTo(0,0); });
+document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => { tab = b.dataset.tab; detail = null; if (tab === "today") cur = cur || todayKey(); render(); window.scrollTo(0,0); });
 render();
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 </script>
