@@ -72,6 +72,7 @@ section.meal{margin-top:22px}
 ul.items{list-style:none;margin:0;padding:0}
 ul.items li{display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--soft);padding:8px 0}
 .it-main{flex:1;min-width:0}
+.it-main.tap{cursor:pointer}
 .it-name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .it-sub{font-size:.85rem;color:var(--muted)}
 .it-kcal{font-weight:700;font-variant-numeric:tabular-nums}
@@ -240,7 +241,7 @@ function renderToday(){
       ${items.length ? `<div class="mmac"><span>Protein <b>${r0(sum.p)} g</b></span><span>Carbs <b>${r0(sum.c)} g</b></span><span>Fat <b>${r0(sum.f)} g</b></span><span>Fiber <b>${r0(sum.fi)} g</b></span><span>Sugar <b>${r0(sum.su)} g</b></span><span>Sat fat <b>${r0(sum.sf)} g</b></span><span>Sodium <b>${r0(sum.na)} mg</b></span></div>` : ""}
       <ul class="items">`;
     items.forEach(e => {
-      html += `<li><div class="it-main"><div class="it-name">${esc(e.name)}</div><div class="it-sub">${esc(e.amount)} · P ${r0(e.p)} · C ${r0(e.c)} · F ${r0(e.f)}</div></div>
+      html += `<li><div class="it-main tap" data-edit-food="${e.id}" role="button" tabindex="0" aria-label="Edit ${esc(e.name)}"><div class="it-name">${esc(e.name)}</div><div class="it-sub">${esc(e.amount)} · P ${r0(e.p)} · C ${r0(e.c)} · F ${r0(e.f)}</div></div>
       <span class="it-kcal">${r0(e.kcal)}</span><button class="del" data-del-food="${e.id}" aria-label="Remove ${esc(e.name)}">✕</button></li>`;
     });
     html += `</ul><button class="addline" data-add-meal="${m}">+ Add food</button></section>`;
@@ -258,6 +259,10 @@ function renderToday(){
   $("#next").onclick = () => { const x = fromKey(cur); x.setDate(x.getDate()+1); cur = keyOf(x); render(); };
   $("#addEx").onclick = openExercise;
   document.querySelectorAll("[data-add-meal]").forEach(b => b.onclick = () => openFood(b.dataset.addMeal));
+  document.querySelectorAll("[data-edit-food]").forEach(el => {
+    const open = () => { const e = d.food.find(x => x.id === el.dataset.editFood); if (e) { foodMeal = e.meal; showPortion(entryFood(e), e); } };
+    el.onclick = open; el.onkeydown = ev => { if (ev.key === "Enter") open(); };
+  });
   document.querySelectorAll("[data-del-food]").forEach(b => b.onclick = () => { d.food = d.food.filter(e => e.id !== b.dataset.delFood); save(); render(); });
   document.querySelectorAll("[data-del-ex]").forEach(b => b.onclick = () => { d.ex = d.ex.filter(e => e.id !== b.dataset.delEx); save(); render(); });
 }
@@ -351,38 +356,110 @@ function drawMine(q){
   ul.querySelectorAll("[data-forget]").forEach(b => b.onclick = () => { S.foods = S.foods.filter(f => f.id !== b.dataset.forget); save(); drawMine($("#q").value); });
 }
 
-function showPortion(food){
+const NUT = ["kcal","p","c","f","fi","su","sf","na"];
+const perOf = food => Object.fromEntries(NUT.map(k => [k, +food[k] || 0]));
+const fmtAmount = (unit, qty) => unit === "g" ? `${r0(qty)} g` : `${r1(qty)} serving${qty === 1 ? "" : "s"}`;
+
+/* Rebuild a food object from a logged entry so it can be edited. */
+function entryFood(e){
+  const saved = S.foods.find(f => f.id === e.foodId);
+  if (e.per) return { id:e.foodId || uid(), name:e.name, brand:saved?.brand || "", barcode:saved?.barcode || "",
+    unit:e.unit, base:e.base, defaultQty:e.qty, ...e.per };
+  // Entries logged before editing existed: treat the whole entry as 1 serving.
+  return { id:uid(), name:e.name, brand:"", barcode:"", unit:"serving", base:1, defaultQty:1, ...perOf(e) };
+}
+
+/* entry = the logged item being edited, or null when adding new food */
+function showPortion(food, entry = null){
   stopScan();
   const unitLabel = food.unit === "g" ? "Amount (g)" : "Servings";
-  openSheet(head("Add to " + foodMeal) + `
+  const qty0 = entry ? (entry.per ? entry.qty : 1) : food.defaultQty;
+  const meal0 = entry ? (entry._draftMeal || entry.meal) : foodMeal;
+  openSheet(head(entry ? "Edit food" : "Add to " + foodMeal) + `
     <p class="portion-name">${esc(food.name)}</p>
     ${food.brand ? `<p class="note" style="margin-top:2px">${esc(food.brand)}</p>` : ""}
     <p class="note">Per ${food.unit === "g" ? "100 g" : "serving"}: ${r0(food.kcal)} kcal · P ${r1(food.p)} · C ${r1(food.c)} · F ${r1(food.f)}<br>Fiber ${r1(food.fi||0)} g · Sugar ${r1(food.su||0)} g · Sat fat ${r1(food.sf||0)} g · Sodium ${r0(food.na||0)} mg</p>
-    <label class="f">${unitLabel}<input id="qty" type="number" inputmode="decimal" min="0" step="${food.unit === "g" ? 1 : 0.25}" value="${food.defaultQty}"></label>
+    <label class="f">${unitLabel}<input id="qty" type="number" inputmode="decimal" min="0" step="${food.unit === "g" ? 1 : 0.25}" value="${qty0}"></label>
     <div class="chips" id="calc"></div>
-    ${mealSelect(foodMeal)}
-    <button class="primary" id="pAdd">Add food</button>
-    <button class="addline" id="back">‹ Back</button>`);
+    ${mealSelect(meal0)}
+    <button class="primary" id="pAdd">${entry ? "Save changes" : "Add food"}</button>
+    <button class="secondary" id="fix" style="width:100%;margin-top:10px">Fix nutrition values</button>
+    ${entry ? `<button class="secondary danger" id="pDel" style="width:100%;margin-top:10px">Remove from log</button>`
+            : `<button class="addline" id="back">‹ Back</button>`}`);
   wireClose();
   const calc = () => {
     const q = parseFloat($("#qty").value) || 0, m = q / food.base;
     $("#calc").innerHTML = `<span>${r0(food.kcal*m)} kcal</span><span>Protein ${r1(food.p*m)} g</span><span>Carbs ${r1(food.c*m)} g</span><span>Fat ${r1(food.f*m)} g</span><span>Fiber ${r1((food.fi||0)*m)} g</span><span>Sugar ${r1((food.su||0)*m)} g</span><span>Sat fat ${r1((food.sf||0)*m)} g</span><span>Sodium ${r0((food.na||0)*m)} mg</span>`;
   };
   $("#qty").oninput = calc; calc();
-  $("#back").onclick = () => showFoodTabs(foodMode);
+  $("#fix").onclick = () => {
+    // keep the amount the person typed while they fix values
+    const q = parseFloat($("#qty").value); if (q > 0) { if (entry) entry._draftQty = q; else food.defaultQty = q; }
+    if (entry) entry._draftMeal = $("#meal").value; else foodMeal = $("#meal").value;
+    showEditFood(food, entry);
+  };
+  if (entry){
+    if (entry._draftQty) { $("#qty").value = entry._draftQty; calc(); }
+    delete entry._draftQty; delete entry._draftMeal;
+    $("#pDel").onclick = () => {
+      const d = day(cur); d.food = d.food.filter(x => x.id !== entry.id);
+      save(); closeSheet(); render(); toast("Removed");
+    };
+  } else {
+    $("#back").onclick = () => showFoodTabs(foodMode);
+  }
   $("#pAdd").onclick = () => {
     const q = parseFloat($("#qty").value);
     if (!(q > 0)){ toast("Enter an amount"); return; }
-    food.defaultQty = q; upsertFood(food);
-    addEntry(food, q, $("#meal").value);
+    if (entry){
+      Object.assign(entry, buildEntry(food, q, $("#meal").value), { id:entry.id });
+      save(); closeSheet(); render(); toast("Changes saved");
+    } else {
+      food.defaultQty = q; upsertFood(food);
+      addEntry(food, q, $("#meal").value);
+    }
   };
 }
 
+function showEditFood(food, entry = null){
+  const per = food.unit === "g" ? "100 g" : "1 serving";
+  const fld = (id, label, v, dec) => `<label class="f">${label}<input id="${id}" type="number" inputmode="decimal" min="0" value="${v == null ? "" : (dec ? r1(v) : r0(v))}"></label>`;
+  openSheet(head("Fix nutrition values") + `
+    <label class="f">Food name<input id="eName" value="${esc(food.name)}"></label>
+    <p class="note">Enter the values <b>per ${per}</b>. On the package, use the "per ${per}" column${food.unit === "g" ? ", not the per-serving column" : ""}.</p>
+    ${fld("eKcal","Calories (kcal)",food.kcal)}
+    <div class="grid2">
+      ${fld("eP","Protein (g)",food.p,1)}${fld("eC","Carbs (g)",food.c,1)}
+      ${fld("eF","Fat (g)",food.f,1)}${fld("eFi","Fiber (g)",food.fi,1)}
+      ${fld("eSu","Sugar (g)",food.su,1)}${fld("eSf","Sat fat (g)",food.sf,1)}
+      ${fld("eNa","Sodium (mg)",food.na)}
+    </div>
+    <button class="primary" id="eSave">Save values</button>
+    <button class="addline" id="eBack">‹ Back</button>`);
+  wireClose();
+  $("#eBack").onclick = () => showPortion(food, entry);
+  $("#eSave").onclick = () => {
+    const v = id => parseFloat($(id).value);
+    const name = $("#eName").value.trim(), kcal = v("#eKcal");
+    if (!name){ toast("Add a food name"); return; }
+    if (!(kcal >= 0)){ toast("Add the calories"); return; }
+    Object.assign(food, { name, kcal, p:v("#eP")||0, c:v("#eC")||0, f:v("#eF")||0, fi:v("#eFi")||0, su:v("#eSu")||0, sf:v("#eSf")||0, na:v("#eNa")||0 });
+    // When editing a logged item, only update My foods if that food is saved there.
+    const inLibrary = S.foods.some(f => f.id === food.id || (food.barcode && f.barcode === food.barcode));
+    if (!entry || inLibrary) upsertFood(food);
+    toast("Values saved"); showPortion(food, entry);
+  };
+}
+
+function buildEntry(food, qty, meal){
+  const m = qty / food.base, per = perOf(food);
+  const e = { meal, name:food.name, foodId:food.id, unit:food.unit, base:food.base, qty, per, amount:fmtAmount(food.unit, qty) };
+  NUT.forEach(k => e[k] = per[k] * m);
+  return e;
+}
+
 function addEntry(food, qty, meal){
-  const m = qty / food.base;
-  const amount = food.unit === "g" ? `${r0(qty)} g` : `${r1(qty)} serving${qty === 1 ? "" : "s"}`;
-  day(cur).food.push({ id:uid(), meal, name:food.name, amount, kcal:food.kcal*m, p:food.p*m, c:food.c*m, f:food.f*m,
-    fi:(food.fi||0)*m, su:(food.su||0)*m, sf:(food.sf||0)*m, na:(food.na||0)*m });
+  day(cur).food.push({ id:uid(), ...buildEntry(food, qty, meal) });
   save(); closeSheet(); render(); toast("Added to " + meal);
 }
 
