@@ -163,7 +163,7 @@ dialog.confirm{margin:auto;width:calc(100% - 48px);max-width:360px;border-radius
 .cf-btns{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
 .cf-btns button{flex:1}
 .danger-fill{background:var(--tomato);border-color:var(--tomato);color:#fff}
-.addrow{display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+.addrow{display:flex;gap:6px 24px;flex-wrap:wrap;align-items:center;justify-content:center}
 .addline.soft{color:var(--muted);font-weight:700}
 .lhead{display:block!important;border-bottom:0!important;padding:14px 0 2px!important;font-size:.8rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .tag{display:inline-block;font-size:.72rem;font-weight:800;padding:1px 6px;border-radius:4px;background:var(--soft);color:var(--accent-ink)}
@@ -210,6 +210,7 @@ dialog.confirm{margin:auto;width:calc(100% - 48px);max-width:360px;border-radius
 .viewtog button{padding:4px 10px}
 .wdot.over{stroke:var(--tomato)}
 .unitrow{display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:.9rem;font-weight:600}
+.muted{color:var(--muted);font-weight:500}
 h2.subpage{font-size:1.2rem;font-weight:800;margin:26px 0 0}
 .toast{position:fixed;left:50%;bottom:calc(80px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:6px;font-weight:700;z-index:50;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.show{opacity:1}
@@ -275,8 +276,12 @@ const COMMON_MACROS = { p:20, c:50, f:30 };   // % of daily calories, a common b
 // Use the common split unless you've chosen your own in Settings (replaces the old 40/40/20 default).
 if (!S.settings.macrosSet) S.settings.macros = { ...COMMON_MACROS };
 /* daily gram targets from the calorie goal and macro split */
-function targets(){
-  const g = S.settings.goal, m = S.settings.macros;
+S.settings.addExercise ??= true;   // add exercise calories to the day's budget and macro targets
+/* the day's calorie budget: goal, plus exercise when that setting is on */
+function budget(k){ return S.settings.goal + (S.settings.addExercise && k ? totals(k).burned : 0); }
+/* daily gram targets from the day's calorie budget and macro split */
+function targets(k){
+  const g = budget(k), m = S.settings.macros;
   return { p: g*m.p/100/4, c: g*m.c/100/4, f: g*m.f/100/9 };
 }
 function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch { toast("Couldn't save. Storage may be full."); } }
@@ -400,7 +405,7 @@ function renderDetail(){
         <div class="it-sub">${esc(e.amount)} · ${r0(share)}% of this meal · P ${r0(e.p)} · C ${r0(e.c)} · F ${r0(e.f)}</div>${splitBar(e)}</div>
         <span class="it-kcal">${r0(e.kcal)}</span></li>`;
     });
-    html += `</ul><button class="addline" data-add-meal="${detail}">+ Add food</button></section>`;
+    html += `</ul><div class="addrow"><button class="addline" data-add-meal="${detail}">+ Add food</button></div></section>`;
   }
   html += `<p class="note" style="margin-top:16px"><span class="key sp"></span>Protein <span class="key sc"></span>Carbs <span class="key sf"></span>Fat</p>`;
   $("#app").innerHTML = html;
@@ -477,8 +482,9 @@ function openCalendar(y, m){
 /* ---------- today ---------- */
 function renderToday(){
   const d = day(cur), t = totals(cur), goal = S.settings.goal;
-  const remaining = goal - t.kcal + t.burned;
-  const pct = Math.min(100, goal ? (t.kcal - t.burned) / goal * 100 : 0);
+  const addEx = S.settings.addExercise, B = budget(cur), tgt = targets(cur);
+  const remaining = B - t.kcal;
+  const pct = Math.min(100, B ? t.kcal / B * 100 : 0);
   const isToday = cur === todayKey();
   let html = `
   <div class="datebar">
@@ -491,7 +497,7 @@ function renderToday(){
     <div class="rule-thick"></div>
     <div class="row"><span>Daily goal</span><b>${r0(goal)}</b></div>
     <div class="row"><span>Food</span><b>− ${r0(t.kcal)}</b></div>
-    <div class="row"><span>Exercise</span><b>+ ${r0(t.burned)}</b></div>
+    <div class="row"><span>Exercise${addEx ? "" : ` <small class="muted">(not added)</small>`}</span><b>${addEx ? "+ " : ""}${r0(t.burned)}</b></div>
     <div class="rule-mid"></div>
     <div class="remain">
       <span class="cap">${remaining < 0 ? "Over by" : "Remaining"}</span>
@@ -500,12 +506,13 @@ function renderToday(){
     <div class="bar" aria-hidden="true"><i class="${remaining < 0 ? "over" : ""}" style="width:${Math.max(0,pct)}%"></i></div>
     <div class="macros tint">
       ${[["m-p","Protein","p"],["m-c","Carbs","c"],["m-f","Fat","f"]].map(([cls,name,k]) => {
-        const tg = targets()[k], real = tg ? t[k]/tg*100 : 0, pct = Math.min(100, real);
+        const tg = tgt[k], real = tg ? t[k]/tg*100 : 0, pct = Math.min(100, real);
         return `<div class="${cls}"><b>${r0(t[k])}<small> / ${r0(tg)} g</small></b>
           <span class="tlabel"><span>${name}</span><em class="${real > 100 ? "tover" : ""}">${r0(real)}%</em></span>
           <i class="tbar" aria-label="${r0(t[k])} of ${r0(tg)} grams, ${r0(real)} percent"><i style="width:${pct}%"></i></i></div>`;
       }).join("")}
     </div>
+    ${addEx && t.burned > 0 ? `<p class="note" style="margin:6px 0 0">Targets based on ${r0(B)} kcal: your ${r0(goal)} goal + ${r0(t.burned)} from exercise.</p>` : ""}
     <div class="macros four">
       <div><b>${r0(t.fi)} g</b><span>Fiber</span></div>
       <div><b>${r0(t.su)} g</b><span>Sugar</span></div>
@@ -534,7 +541,7 @@ function renderToday(){
     html += `<li><div class="it-main"><div class="it-name">${esc(e.name)}</div><div class="it-sub">${e.min ? e.min + " min" : "Custom"}</div></div>
     <span class="it-kcal">${r0(e.kcal)}</span><button class="del" data-del-ex="${e.id}" aria-label="Remove ${esc(e.name)}">✕</button></li>`;
   });
-  html += `</ul><button class="addline" id="addEx">+ Add exercise</button></section>`;
+  html += `</ul><div class="addrow"><button class="addline" id="addEx">+ Add exercise</button></div></section>`;
   html += waterCard(d);
   $("#app").innerHTML = html;
 
@@ -1203,6 +1210,8 @@ function renderSettings(){
         <button data-unit="kg" aria-pressed="${wU() === "kg"}">kg</button><button data-unit="lb" aria-pressed="${wU() === "lb"}">lb</button>
       </div></div>
     <p class="note">Weight is used to estimate calories burned during exercise. Saving a weigh-in in History updates it too.</p>
+    <label class="check"><input type="checkbox" id="sAddEx" ${S.settings.addExercise ? "checked" : ""}> Add exercise calories to my daily goal</label>
+    <p class="note">When on, exercise raises your calories and your protein, carbs and fat targets for that day. Exercise numbers are estimates and are often a bit high, so if your weight isn't moving the way you expect, try turning this off.</p>
     <label class="f">Water goal (glasses of 250 ml)<input id="sWater" type="number" inputmode="numeric" min="1" max="30" value="${S.settings.waterGoal}"></label>
 
     <p class="subhead" style="margin-top:22px">Calories from protein, carbs and fat</p>
@@ -1227,7 +1236,7 @@ function renderSettings(){
       <button class="secondary danger" id="wipe">Delete all data</button>
     </div>
     <p class="note" style="margin-top:28px">Barcode data from Open Food Facts (openfoodfacts.org). Food search data from USDA FoodData Central (fdc.nal.usda.gov).</p>
-    <p class="note">MeraFood version 18</p>`;
+    <p class="note">MeraFood version 20</p>`;
   const mp = () => ({ p:parseFloat($("#mpP").value)||0, c:parseFloat($("#mpC").value)||0, f:parseFloat($("#mpF").value)||0 });
   const showMacros = () => {
     const m = mp(), total = m.p + m.c + m.f, g = parseFloat($("#sGoal").value) || 0;
@@ -1256,6 +1265,7 @@ function renderSettings(){
     const m = mp();
     if (m.p + m.c + m.f !== 100){ toast("Protein, carbs and fat must add up to 100%"); return; }
     S.settings.macros = m; S.settings.macrosSet = true;
+    S.settings.addExercise = $("#sAddEx").checked;
     S.settings.waterGoal = Math.max(1, Math.round(parseFloat($("#sWater").value) || 8));
     S.settings.goal = g; S.settings.weight = w; S.settings.usdaKey = $("#sKey").value.trim(); save(); toast("Settings saved");
   };
